@@ -1,0 +1,24 @@
+# Environments
+venv/
+env/
+.env
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Mac OS files
+.DS_Store
+
+# Data files (we should ignore large datasets, they don't belong in Git)
+*.csv
+*.json
+*.xlsx
+*.parquet
+data/
+!data/.gitkeep
+
+# IDEs
+.vscode/
+.idea/

@@ -1,0 +1,14 @@
+# Core Data Manipulation
+pandas
+numpy
+
+# Data Visualization
+plotly
+matplotlib
+seaborn
+
+# Dashboard / Web App (for showing your work)
+streamlit
+
+# Development
+jupyter
