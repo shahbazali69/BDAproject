@@ -12,3 +12,7 @@ streamlit
 
 # Development
 jupyter
+
+# Big Data Analytics & Database
+pyspark
+pymongo

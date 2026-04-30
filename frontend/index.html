@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FraudSentinel — Big Data Return Analytics</title>
+  <meta name="description" content="Real-time e-commerce return fraud detection dashboard powered by Hadoop & MongoDB MapReduce analytics." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════ SIDEBAR ═══════════════════ -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <div class="brand-icon">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M2 17L12 22L22 17" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M2 12L12 17L22 12" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <span class="brand-name">FraudSentinel</span>
+        <span class="brand-sub">Analytics Platform</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav" aria-label="Main navigation">
+      <a href="#" class="nav-item active" id="nav-overview" aria-current="page">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/></svg>
+        Overview
+      </a>
+      <a href="#" class="nav-item" id="nav-fraud">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" stroke="currentColor" stroke-width="2"/><line x1="12" y1="9" x2="12" y2="13" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="17" r="1" fill="currentColor"/></svg>
+        Fraud Report
+      </a>
+      <a href="#" class="nav-item" id="nav-categories">
+        <svg viewBox="0 0 24 24" fill="none"><line x1="18" y1="20" x2="18" y2="10" stroke="currentColor" stroke-width="2"/><line x1="12" y1="20" x2="12" y2="4" stroke="currentColor" stroke-width="2"/><line x1="6" y1="20" x2="6" y2="14" stroke="currentColor" stroke-width="2"/></svg>
+        Categories
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="status-badge" id="db-status-badge">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="db-status-text">Connecting…</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ════════════════════════════════════════════ MAIN ════════════════════ -->
+  <main class="main-content" id="main">
+
+    <!-- Top bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h1 class="page-title">Return Fraud <span class="gradient-text">Intelligence</span></h1>
+        <p class="page-subtitle">Live analytics · Hadoop MapReduce · MongoDB</p>
+      </div>
+      <div class="topbar-right">
+        <div class="last-updated" id="last-updated">Fetching data…</div>
+        <button class="refresh-btn" id="refresh-btn" title="Refresh data" aria-label="Refresh dashboard data">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- ── Page: Overview ──────────────────────────────────────────────────── -->
+    <div id="page-overview" class="page-section">
+
+    <!-- ── KPI Cards ─────────────────────────────────────────────────────── -->
+    <section class="kpi-grid" id="kpi-grid" aria-label="Key performance indicators">
+      <div class="kpi-card" id="kpi-refund-loss">
+        <div class="kpi-icon refund-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">Total Refund Loss</span>
+          <span class="kpi-value" id="val-refund-loss">—</span>
+          <span class="kpi-delta negative">↑ 12.4% vs last month</span>
+        </div>
+      </div>
+
+      <div class="kpi-card" id="kpi-total-returns">
+        <div class="kpi-icon returns-icon">
+          <svg viewBox="0 0 24 24" fill="none"><polyline points="1 4 1 10 7 10" stroke="currentColor" stroke-width="2"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">Total Returns</span>
+          <span class="kpi-value" id="val-total-returns">—</span>
+          <span class="kpi-delta negative">↑ 8.1% vs last month</span>
+        </div>
+      </div>
+
+      <div class="kpi-card" id="kpi-flagged">
+        <div class="kpi-icon flagged-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" stroke="currentColor" stroke-width="2"/><line x1="4" y1="22" x2="4" y2="15" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">Flagged Accounts</span>
+          <span class="kpi-value" id="val-flagged">—</span>
+          <span class="kpi-delta negative">↑ 3.2% vs last month</span>
+        </div>
+      </div>
+
+      <div class="kpi-card" id="kpi-fraud-rate">
+        <div class="kpi-icon fraud-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">Fraud Rate</span>
+          <span class="kpi-value" id="val-fraud-rate">—</span>
+          <span class="kpi-delta positive">↓ 1.3% vs last month</span>
+        </div>
+      </div>
+
+      <div class="kpi-card" id="kpi-avg-refund">
+        <div class="kpi-icon avg-icon">
+          <svg viewBox="0 0 24 24" fill="none"><line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" stroke-width="2"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">Avg. Refund Value</span>
+          <span class="kpi-value" id="val-avg-refund">—</span>
+          <span class="kpi-delta neutral">→ No change</span>
+        </div>
+      </div>
+
+      <div class="kpi-card" id="kpi-high-risk">
+        <div class="kpi-icon high-risk-icon">
+          <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
+        </div>
+        <div class="kpi-data">
+          <span class="kpi-label">High-Risk Accounts</span>
+          <span class="kpi-value" id="val-high-risk">—</span>
+          <span class="kpi-delta negative">↑ 5.7% vs last month</span>
+        </div>
+      </div>
+    </section>
+
+    </div><!-- /#page-overview -->
+
+    <!-- ── Page: Categories ───────────────────────────────────────────────── -->
+    <div id="page-categories" class="page-section" style="display: none;">
+
+    <!-- ── Category Chart & Mini Stats ──────────────────────────────────── -->
+    <section class="charts-row" id="categories-section" aria-label="Return categories analysis">
+      <div class="glass-card chart-card">
+        <div class="card-header">
+          <h2 class="card-title">Return Volume by Category</h2>
+          <span class="card-badge">Live Data</span>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="category-chart" aria-label="Bar chart showing returns by product category"></canvas>
+        </div>
+      </div>
+
+      <div class="glass-card donut-card">
+        <div class="card-header">
+          <h2 class="card-title">Refund Loss Share</h2>
+          <span class="card-badge">By Category</span>
+        </div>
+        <div class="chart-wrapper donut-wrapper">
+          <canvas id="donut-chart" aria-label="Donut chart showing refund loss share by category"></canvas>
+        </div>
+        <div class="donut-legend" id="donut-legend"></div>
+      </div>
+    </section>
+
+    <!-- ── Category Return Rate Bars ─────────────────────────────────────── -->
+    <section class="glass-card rate-card" aria-label="Category return rates">
+      <div class="card-header">
+        <h2 class="card-title">Category Return Rates</h2>
+        <span class="card-badge">% of Total</span>
+      </div>
+      <div class="rate-bars" id="rate-bars"></div>
+    </section>
+
+    </div><!-- /#page-categories -->
+
+    <!-- ── Page: Fraud ────────────────────────────────────────────────────── -->
+    <div id="page-fraud" class="page-section" style="display: none;">
+
+    <!-- ── Fraud Risk Report Table ─────────────────────────────────────── -->
+    <section class="glass-card table-card" id="fraud-section" aria-label="Fraud risk customer report">
+      <div class="card-header">
+        <h2 class="card-title">Fraud Risk Customer Report</h2>
+        <div class="table-controls">
+          <input type="search" id="table-search" placeholder="Search customers…" aria-label="Search customers" class="search-input" />
+          <select id="risk-filter" aria-label="Filter by risk level" class="filter-select">
+            <option value="all">All Risk Levels</option>
+            <option value="High">🔴 High Risk</option>
+            <option value="Medium">🟠 Medium Risk</option>
+            <option value="Low">🟢 Low Risk</option>
+          </select>
+        </div>
+      </div>
+      <div class="table-wrapper">
+        <table id="fraud-table" aria-live="polite">
+          <thead>
+            <tr>
+              <th scope="col">Customer</th>
+              <th scope="col">Customer ID</th>
+              <th scope="col">Returns</th>
+              <th scope="col">Refunds Claimed</th>
+              <th scope="col">Risk Score</th>
+              <th scope="col">Risk Level</th>
+              <th scope="col">Flagged On</th>
+            </tr>
+          </thead>
+          <tbody id="fraud-tbody"></tbody>
+        </table>
+      </div>
+      <div class="table-footer">
+        <span id="table-count">Loading…</span>
+      </div>
+    </section>
+
+    </div><!-- /#page-fraud -->
+
+  </main>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

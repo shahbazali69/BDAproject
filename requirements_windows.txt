@@ -1,0 +1,24 @@
+# Core Data Manipulation
+pandas
+numpy
+
+# Data Visualization
+plotly
+matplotlib
+seaborn
+
+# Dashboard / Web App (for showing your work)
+streamlit
+
+# Development
+jupyter
+
+# Big Data Analytics & Database
+pyspark
+pymongo
+
+# Note for Windows Users using PySpark:
+# PySpark requires winutils.exe and hadoop.dll to be installed on Windows.
+# You will need to download the winutils binaries for your Hadoop version and set the HADOOP_HOME environment variable.
+# Example winutils repository: https://github.com/cdarlint/winutils
+# You will also need Java 8, 11, or 17 installed and JAVA_HOME set.

@@ -3,7 +3,7 @@
 This project is set up for collaborative big data analysis and visualization.
 
 ## Setup Instructions
-1. Clone the repository: `git clone <your-github-repo-url>`
+1. Clone the repository: `git clone <https://github.com/shahbazali69/BDAproject>`
 2. Create and activate the virtual environment:
    - Mac/Linux: `source venv/bin/activate`
    - Windows: `venv\Scripts\activate`
