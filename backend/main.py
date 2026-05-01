@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+import re
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure
 import random
@@ -49,7 +50,8 @@ MOCK_CATEGORY_RETURNS = [
 ]
 
 RISK_LEVELS = ["High", "High", "High", "Medium", "Medium", "Low"]
-MOCK_FRAUD_REPORT = [
+ALL_CATEGORIES = ["Electronics", "Fashion", "Home & Garden", "Sports", "Beauty", "Toys & Games"]
+MOCK_CUSTOMERS = [
     {
         "customer_id": f"USR-{10000 + i}",
         "name": name,
@@ -59,6 +61,7 @@ MOCK_FRAUD_REPORT = [
         "risk_score": round(random.uniform(60, 99), 1),
         "risk_level": RISK_LEVELS[i % len(RISK_LEVELS)],
         "flagged_on": f"2024-{random.randint(1,12):02d}-{random.randint(1,28):02d}",
+        "categories": random.sample(ALL_CATEGORIES, k=random.randint(1, 3)),
     }
     for i, name in enumerate([
         "Amara Okafor", "Liam Fitzgerald", "Zara Ahmed", "Marcus Webb",
@@ -85,6 +88,7 @@ async def get_kpis():
         return MOCK_KPIS
 
     pipeline = [
+        {"$match": {"return_status": "Yes"}},
         {
             "$group": {
                 "_id": None,
@@ -119,6 +123,7 @@ async def get_category_returns():
         return MOCK_CATEGORY_RETURNS
 
     pipeline = [
+        {"$match": {"return_status": "Yes"}},
         {
             "$group": {
                 "_id":          "$product_category",
@@ -145,32 +150,92 @@ async def get_category_returns():
     ]
 
 
-@app.get("/api/fraud-report")
-async def get_fraud_report():
+@app.get("/api/customers")
+async def get_customers(
+    search: str = Query("", description="Search filter"),
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(15, ge=1, le=100, description="Items per page"),
+    risk: str = Query("all", description="Risk level filter"),
+):
     if not MONGO_LIVE:
-        return MOCK_FRAUD_REPORT
+        # ── Mock data path ────────────────────────────────────────────────
+        filtered = MOCK_CUSTOMERS
+        if search:
+            s = search.lower()
+            filtered = [
+                c for c in filtered
+                if s in c["name"].lower()
+                or s in c["email"].lower()
+                or s in c["customer_id"].lower()
+                or any(s in cat.lower() for cat in c.get("categories", []))
+            ]
+        if risk and risk != "all":
+            filtered = [c for c in filtered if _risk_level(c["risk_score"]) == risk]
+        # Sort by return_count descending
+        filtered = sorted(filtered, key=lambda c: c["return_count"], reverse=True)
+        total = len(filtered)
+        start = (page - 1) * limit
+        sliced = filtered[start : start + limit]
+        return {"total": total, "page": page, "limit": limit, "data": sliced}
 
+    # ── MongoDB path ──────────────────────────────────────────────────
     pipeline = [
-        {"$match": {"risk_score": {"$gte": 50}}},
         {
             "$group": {
                 "_id":                  "$customer_id",
                 "name":                 {"$first": "$customer_name"},
                 "email":                {"$first": "$customer_email"},
                 "total_refunds_claimed":{"$sum": "$refund_amount"},
-                "return_count":         {"$sum": 1},
+                "return_count":         {"$sum": {"$cond": [{"$eq": ["$return_status", "Yes"]}, 1, 0]}},
                 "risk_score":           {"$avg": "$risk_score"},
                 "flagged_on":           {"$first": "$return_date"},
+                "categories":           {"$addToSet": "$product_category"},
             }
         },
-        {"$sort": {"risk_score": -1}},
-        {"$limit": 50},
     ]
+
+    # Optional search filter (after grouping)
+    if search:
+        search_regex = {"$regex": re.escape(search), "$options": "i"}
+        pipeline.append({
+            "$match": {
+                "$or": [
+                    {"name":       search_regex},
+                    {"email":      search_regex},
+                    {"_id":        search_regex},
+                    {"categories": search_regex},
+                ]
+            }
+        })
+
+    # Optional risk filter
+    if risk and risk != "all":
+        if risk == "High":
+            pipeline.append({"$match": {"risk_score": {"$gte": 80}}})
+        elif risk == "Medium":
+            pipeline.append({"$match": {"risk_score": {"$gte": 50, "$lt": 80}}})
+        elif risk == "Low":
+            pipeline.append({"$match": {"risk_score": {"$lt": 50}}})
+
+    # Facet for total count + paginated data
+    pipeline.append({
+        "$facet": {
+            "metadata": [{"$count": "total"}],
+            "data": [
+                {"$sort": {"return_count": -1}},
+                {"$skip": (page - 1) * limit},
+                {"$limit": limit},
+            ]
+        }
+    })
+
     result = list(collection.aggregate(pipeline))
     if not result:
-        return MOCK_FRAUD_REPORT
+        return {"total": 0, "page": page, "limit": limit, "data": []}
 
-    return [
+    facet = result[0]
+    total = facet["metadata"][0]["total"] if facet["metadata"] else 0
+    data = [
         {
             "customer_id":           r["_id"],
             "name":                  r.get("name", "Unknown"),
@@ -180,9 +245,11 @@ async def get_fraud_report():
             "risk_score":            round(r.get("risk_score", 0), 1),
             "risk_level":            _risk_level(r.get("risk_score", 0)),
             "flagged_on":            str(r.get("flagged_on", ""))[:10],
+            "categories":            r.get("categories", []),
         }
-        for r in result
+        for r in facet["data"]
     ]
+    return {"total": total, "page": page, "limit": limit, "data": data}
 
 
 @app.get("/")

@@ -18,9 +18,15 @@ const CHART_COLORS = [
 ];
 
 // ── State ────────────────────────────────────────────────────────────────────
-let fraudData   = [];
-let chartBar    = null;
-let chartDonut  = null;
+let chartBar      = null;
+let chartDonut    = null;
+let analysisState = { analyzed: false, category: 'all' };
+
+// Pagination state
+let currentPage      = 1;
+const PAGE_LIMIT     = 15;
+let currentSearchQuery = '';
+let searchDebounceTimer = null;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const fmt = {
@@ -202,7 +208,7 @@ function renderRateBars(categories) {
   });
 }
 
-// ── Fraud Table ───────────────────────────────────────────────────────────────
+// ── Customer Table ───────────────────────────────────────────────────────────
 function getRiskClass(level) {
   return level === 'High' ? 'high' : level === 'Medium' ? 'medium' : 'low';
 }
@@ -212,63 +218,124 @@ function getRiskDot(level) {
 }
 
 function buildTableRow(row) {
-  const rc   = getRiskClass(row.risk_level);
-  const pct  = Math.min(row.risk_score, 100);
+  // Determine if this row's risk data should be revealed
+  const isAnalyzed = analysisState.analyzed &&
+    (analysisState.category === 'all' || (row.categories && row.categories.includes(analysisState.category)));
 
-  return `
-    <tr>
-      <td>
-        <div class="customer-cell">
-          <span class="customer-name">${row.name}</span>
-          <span class="customer-email">${row.email}</span>
-        </div>
-      </td>
-      <td>${row.customer_id}</td>
-      <td>${fmt.number(row.return_count)}</td>
-      <td>${fmt.currency(row.total_refunds_claimed)}</td>
-      <td>
-        <div class="risk-score-bar">
-          <div class="score-track">
-            <div class="score-fill ${rc}" style="width:${pct}%"></div>
+  const categoriesText = (row.categories || []).join(', ');
+
+  if (isAnalyzed) {
+    const rc  = getRiskClass(row.risk_level);
+    const pct = Math.min(row.risk_score, 100);
+
+    return `
+      <tr>
+        <td>
+          <div class="customer-cell">
+            <span class="customer-name">${row.name}</span>
+            <span class="customer-email">${row.email}</span>
           </div>
-          <span class="score-num">${row.risk_score}</span>
-        </div>
-      </td>
-      <td>
-        <span class="risk-badge ${rc}">
-          ${getRiskDot(row.risk_level)} ${row.risk_level}
-        </span>
-      </td>
-      <td>${fmt.date(row.flagged_on)}</td>
-    </tr>
-  `;
+        </td>
+        <td>${row.customer_id}</td>
+        <td>${categoriesText}</td>
+        <td>${fmt.number(row.return_count)}</td>
+        <td>${fmt.currency(row.total_refunds_claimed)}</td>
+        <td>
+          <div class="risk-score-bar">
+            <div class="score-track">
+              <div class="score-fill ${rc}" style="width:${pct}%"></div>
+            </div>
+            <span class="score-num">${row.risk_score}</span>
+          </div>
+        </td>
+        <td>
+          <span class="risk-badge ${rc}">
+            ${getRiskDot(row.risk_level)} ${row.risk_level}
+          </span>
+        </td>
+        <td>${fmt.date(row.flagged_on)}</td>
+      </tr>
+    `;
+  } else {
+    // Unanalyzed: show customer info but hide risk data
+    return `
+      <tr>
+        <td>
+          <div class="customer-cell">
+            <span class="customer-name">${row.name}</span>
+            <span class="customer-email">${row.email}</span>
+          </div>
+        </td>
+        <td>${row.customer_id}</td>
+        <td>${categoriesText}</td>
+        <td>${fmt.number(row.return_count)}</td>
+        <td>${fmt.currency(row.total_refunds_claimed)}</td>
+        <td>
+          <div class="risk-score-bar">
+            <div class="score-track">
+              <div class="score-fill unanalyzed"></div>
+            </div>
+            <span class="score-num" style="color:var(--text-muted)">—</span>
+          </div>
+        </td>
+        <td>
+          <span class="risk-badge unanalyzed">
+            ○ Unanalyzed
+          </span>
+        </td>
+        <td>—</td>
+      </tr>
+    `;
+  }
 }
 
-function renderTable(data) {
-  fraudData = data;
-  filterTable();
-}
+// ── Fetch & Render Customers (server-side paginated) ─────────────────────────
+async function fetchAndRenderCustomers() {
+  const tbody    = document.getElementById('customers-tbody');
+  const countEl  = document.getElementById('table-count');
+  const prevBtn  = document.getElementById('prev-page-btn');
+  const nextBtn  = document.getElementById('next-page-btn');
+  const searchVal = document.getElementById('table-search').value;
 
-function filterTable() {
-  const query      = document.getElementById('table-search').value.toLowerCase();
-  const riskFilter = document.getElementById('risk-filter').value;
+  // Show loading state
+  tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Loading customers…</td></tr>';
+  countEl.textContent = 'Fetching…';
 
-  const filtered = fraudData.filter(row => {
-    const matchRisk   = riskFilter === 'all' || row.risk_level === riskFilter;
-    const matchSearch = !query ||
-      row.name.toLowerCase().includes(query) ||
-      row.customer_id.toLowerCase().includes(query) ||
-      row.email.toLowerCase().includes(query);
-    return matchRisk && matchSearch;
-  });
+  // Build query string
+  const riskVal = document.getElementById('risk-filter').value;
+  const qs = `customers?page=${currentPage}&limit=${PAGE_LIMIT}&search=${encodeURIComponent(searchVal)}&risk=${encodeURIComponent(riskVal)}`;
+  const response = await safeFetch(qs);
 
-  const tbody = document.getElementById('fraud-tbody');
-  tbody.innerHTML = filtered.length
-    ? filtered.map(buildTableRow).join('')
-    : '<tr><td colspan="7" style="text-align:center;color:var(--text-muted);padding:2rem;">No matching customers found.</td></tr>';
+  if (!response || !response.data) {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">Could not load customer data.</td></tr>';
+    countEl.textContent = 'No data';
+    prevBtn.disabled = true;
+    nextBtn.disabled = true;
+    return;
+  }
 
-  document.getElementById('table-count').textContent =
-    `Showing ${filtered.length} of ${fraudData.length} customers`;
+  const { total, page, limit, data } = response;
+  const totalPages = Math.ceil(total / limit) || 1;
+
+  // Render rows
+  if (data.length > 0) {
+    tbody.innerHTML = data.map(buildTableRow).join('');
+  } else {
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:var(--text-muted);padding:2rem;">No matching customers found.</td></tr>';
+  }
+
+  // Update pagination info
+  const start = (page - 1) * limit + 1;
+  const end   = Math.min(page * limit, total);
+  if (total > 0) {
+    countEl.textContent = `Showing ${fmt.number(start)}–${fmt.number(end)} of ${fmt.number(total)} customers`;
+  } else {
+    countEl.textContent = '0 customers';
+  }
+
+  // Enable/disable pagination buttons
+  prevBtn.disabled = page <= 1;
+  nextBtn.disabled = page >= totalPages;
 }
 
 // ── Timestamp ─────────────────────────────────────────────────────────────────
@@ -282,15 +349,13 @@ async function loadDashboard() {
   // Show skeletons
   skeletonKPIs();
 
-  // Fetch all three endpoints in parallel
-  const [kpis, categories, fraud] = await Promise.all([
+  // Fetch KPIs and Categories in parallel (customers fetched separately via pagination)
+  const [kpis, categories] = await Promise.all([
     safeFetch('kpis'),
     safeFetch('category-returns'),
-    safeFetch('fraud-report'),
   ]);
 
-  // Detect if backend is live (proxy: kpis returned and includes a known mock key pattern)
-  // The backend itself signals via /api/kpis — we just check if data arrived
+  // Detect if backend is live
   const backendLive = kpis !== null;
   setDbStatus(backendLive);
   updateTimestamp();
@@ -306,24 +371,127 @@ async function loadDashboard() {
     renderRateBars(categories);
   }
 
-  // Fraud table
-  if (fraud && fraud.length) {
-    renderTable(fraud);
-  }
+  // Customer table (paginated fetch)
+  await fetchAndRenderCustomers();
 }
 
 // ── Event Listeners ───────────────────────────────────────────────────────────
 document.getElementById('refresh-btn').addEventListener('click', () => {
+  currentPage = 1;
   loadDashboard();
 });
 
-document.getElementById('table-search').addEventListener('input', filterTable);
-document.getElementById('risk-filter').addEventListener('change', filterTable);
+// Debounced search input — resets to page 1 on each keystroke
+document.getElementById('table-search').addEventListener('input', () => {
+  clearTimeout(searchDebounceTimer);
+  searchDebounceTimer = setTimeout(() => {
+    currentPage = 1;
+    fetchAndRenderCustomers();
+  }, 300);
+});
+
+// Risk filter is no longer client-side (search covers it), but keep for UX if needed
+// For now, risk filter triggers a re-fetch at page 1 (server doesn't filter by risk,
+// but keeping the dropdown functional for future server-side expansion)
+document.getElementById('risk-filter').addEventListener('change', () => {
+  currentPage = 1;
+  fetchAndRenderCustomers();
+});
+
+// Pagination buttons
+document.getElementById('prev-page-btn').addEventListener('click', () => {
+  if (currentPage > 1) {
+    currentPage--;
+    fetchAndRenderCustomers();
+  }
+});
+
+document.getElementById('next-page-btn').addEventListener('click', () => {
+  currentPage++;
+  fetchAndRenderCustomers();
+});
+
+// ── Global Search (Enter → navigate to Customer Returns with filter) ─────────
+document.getElementById('global-search').addEventListener('keyup', (e) => {
+  if (e.key === 'Enter') {
+    const query = e.target.value.trim();
+    if (!query) return;
+
+    // Set the search input on Customer Returns page
+    document.getElementById('table-search').value = query;
+    currentPage = 1;
+
+    // Navigate to the Customer Returns tab
+    document.getElementById('nav-customers').click();
+
+    // Fetch filtered results from backend
+    fetchAndRenderCustomers();
+
+    // Clear the global search input
+    e.target.value = '';
+  }
+});
+
+// ── Run Fraud Analysis (simulated Big Data pipeline) ─────────────────────────
+document.getElementById('run-analysis-btn').addEventListener('click', () => {
+  const overlay    = document.getElementById('analysis-overlay');
+  const progress   = document.getElementById('analysis-progress');
+  const statusText = document.getElementById('analysis-status-text');
+  const selectedCategory = document.getElementById('analyze-category-select').value;
+  const categoryLabel = selectedCategory === 'all' ? 'all categories' : selectedCategory;
+
+  // Show overlay
+  overlay.style.display = 'flex';
+  progress.style.width  = '0%';
+  statusText.textContent = 'Initializing pipeline…';
+
+  // Simulated stages — customized with category context
+  const stages = [
+    { text: 'Connecting to Hadoop cluster…',                              pct: '15%',  delay: 600  },
+    { text: 'Spinning up MapReduce jobs…',                                pct: '35%',  delay: 1000 },
+    { text: `Analyzing ${categoryLabel} transactions…`,                   pct: '55%',  delay: 900  },
+    { text: `Aggregating risk scores for ${categoryLabel}…`,              pct: '80%',  delay: 800  },
+    { text: 'Finalizing fraud report…',                                   pct: '95%',  delay: 700  },
+  ];
+
+  let cumulativeDelay = 300;
+
+  stages.forEach((stage) => {
+    cumulativeDelay += stage.delay;
+    setTimeout(() => {
+      statusText.textContent = stage.text;
+      progress.style.width   = stage.pct;
+    }, cumulativeDelay);
+  });
+
+  // Complete and dismiss
+  cumulativeDelay += 500;
+  setTimeout(() => {
+    progress.style.width   = '100%';
+    statusText.textContent = '✓ Analysis complete';
+  }, cumulativeDelay);
+
+  cumulativeDelay += 600;
+  setTimeout(() => {
+    overlay.style.display = 'none';
+
+    // Update analysis state so table rows reveal risk data
+    analysisState.analyzed = true;
+    analysisState.category = selectedCategory;
+
+    // Re-render table with newly revealed risk data
+    currentPage = 1;
+    fetchAndRenderCustomers();
+
+    // Navigate to the Customer Returns tab to show results
+    document.getElementById('nav-customers').click();
+  }, cumulativeDelay);
+});
 
 // ── SPA Tab Navigation ────────────────────────────────────────────────────────
 const NAV_MAP = {
   'nav-overview':   'page-overview',
-  'nav-fraud':      'page-fraud',
+  'nav-customers':  'page-customers',
   'nav-categories': 'page-categories',
 };
 
