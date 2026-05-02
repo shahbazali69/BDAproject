@@ -35,7 +35,7 @@ kpis_col = db["kpis"]
 categories_col = db["categories"]
 customers_col = db["customers"]
 
-print("✅  MongoDB collections configured: kpis, categories, customers")
+print("[OK] MongoDB collections configured: kpis, categories, customers")
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -57,7 +57,13 @@ async def get_kpis():
     doc.pop("_id", None)
     
     total = doc.get("total_returns", 1)
-    doc["fraud_rate_pct"] = round((doc.get("flagged_accounts", 0) / total) * 100, 1) if total else 0
+    
+    # Override MapReduce estimates with 100% accurate database counts
+    doc["high_risk_accounts"] = customers_col.count_documents({"risk_score": {"$gte": 80}})
+    doc["flagged_accounts"] = customers_col.count_documents({"risk_score": {"$gte": 50}})
+    
+    total_customers = customers_col.count_documents({}) or 1
+    doc["fraud_rate_pct"] = round((doc["flagged_accounts"] / total_customers) * 100, 1)
     
     return doc
 
@@ -87,6 +93,7 @@ async def get_customers(
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(15, ge=1, le=100, description="Items per page"),
     risk: str = Query("all", description="Risk level filter: High, Medium, Low, or all"),
+    category: str = Query("all", description="Category filter"),
 ):
     """Return paginated, filterable customer data from the Hadoop customers collection."""
 
@@ -108,6 +115,9 @@ async def get_customers(
             query["risk_score"] = {"$gte": 50, "$lt": 80}
         elif risk == "Low":
             query["risk_score"] = {"$lt": 50}
+
+    if category and category != "all":
+        query["categories"] = category
 
     # ── Count & Fetch ─────────────────────────────────────────────────
     total = customers_col.count_documents(query)

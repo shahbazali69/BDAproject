@@ -8,17 +8,10 @@ header = next(reader, None)
 
 for row in reader:
     try:
-        returned = row[11].strip()
-        total_amount = row[14].strip()
-        
-        is_return = 1 if returned == "1" else 0
+        is_return = int(row[4].strip())
         if is_return == 1:
-            try:
-                refund_amount = float(total_amount)
-            except ValueError:
-                refund_amount = 0.0
-            
-            risk_score = round(random.uniform(40.0, 99.0), 2)
+            refund_amount = float(row[5].strip())
+            risk_score = float(row[7].strip()) if row[7].strip() else 0.0
             print(f"Global_KPI\t{refund_amount},{risk_score}")
     except IndexError:
         continue

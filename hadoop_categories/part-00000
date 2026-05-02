@@ -1,0 +1,7 @@
+Beauty	{"returns": 4164, "refund_loss": 181052.48}
+Electronics	{"returns": 13041, "refund_loss": 7111665.18}
+Fashion	{"returns": 14319, "refund_loss": 1092150.6}
+Grocery	{"returns": 184, "refund_loss": 9691.79}
+Home	{"returns": 8833, "refund_loss": 1788578.22}
+Sports	{"returns": 5904, "refund_loss": 909843.55}
+Toys	{"returns": 5173, "refund_loss": 164299.03}

@@ -34,7 +34,8 @@ def process_chunk(chunk: pd.DataFrame) -> pd.DataFrame:
     records = []
 
     for _, row in chunk.iterrows():
-        is_return = 1 if row.get("returned") == "Yes" else 0
+        returned_val = str(row.get("returned", "")).strip()
+        is_return = 1 if returned_val == "1" else 0
 
         risk_score = (
             round(random.uniform(40.0, 99.0), 2)

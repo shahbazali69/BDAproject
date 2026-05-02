@@ -218,75 +218,38 @@ function getRiskDot(level) {
 }
 
 function buildTableRow(row) {
-  // Determine if this row's risk data should be revealed
-  const isAnalyzed = analysisState.analyzed &&
-    (analysisState.category === 'all' || (row.categories && row.categories.includes(analysisState.category)));
-
   const categoriesText = (row.categories || []).join(', ');
+  const rc  = getRiskClass(row.risk_level);
+  const pct = Math.min(row.risk_score, 100);
 
-  if (isAnalyzed) {
-    const rc  = getRiskClass(row.risk_level);
-    const pct = Math.min(row.risk_score, 100);
-
-    return `
-      <tr>
-        <td>
-          <div class="customer-cell">
-            <span class="customer-name">${row.name}</span>
-            <span class="customer-email">${row.email}</span>
+  return `
+    <tr>
+      <td>
+        <div class="customer-cell">
+          <span class="customer-name">${row.name}</span>
+          <span class="customer-email">${row.email}</span>
+        </div>
+      </td>
+      <td>${row.customer_id}</td>
+      <td>${categoriesText}</td>
+      <td>${fmt.number(row.return_count)}</td>
+      <td>${fmt.currency(row.total_refunds_claimed)}</td>
+      <td>
+        <div class="risk-score-bar">
+          <div class="score-track">
+            <div class="score-fill ${rc}" style="width:${pct}%"></div>
           </div>
-        </td>
-        <td>${row.customer_id}</td>
-        <td>${categoriesText}</td>
-        <td>${fmt.number(row.return_count)}</td>
-        <td>${fmt.currency(row.total_refunds_claimed)}</td>
-        <td>
-          <div class="risk-score-bar">
-            <div class="score-track">
-              <div class="score-fill ${rc}" style="width:${pct}%"></div>
-            </div>
-            <span class="score-num">${row.risk_score}</span>
-          </div>
-        </td>
-        <td>
-          <span class="risk-badge ${rc}">
-            ${getRiskDot(row.risk_level)} ${row.risk_level}
-          </span>
-        </td>
-        <td>${fmt.date(row.flagged_on)}</td>
-      </tr>
-    `;
-  } else {
-    // Unanalyzed: show customer info but hide risk data
-    return `
-      <tr>
-        <td>
-          <div class="customer-cell">
-            <span class="customer-name">${row.name}</span>
-            <span class="customer-email">${row.email}</span>
-          </div>
-        </td>
-        <td>${row.customer_id}</td>
-        <td>${categoriesText}</td>
-        <td>${fmt.number(row.return_count)}</td>
-        <td>${fmt.currency(row.total_refunds_claimed)}</td>
-        <td>
-          <div class="risk-score-bar">
-            <div class="score-track">
-              <div class="score-fill unanalyzed"></div>
-            </div>
-            <span class="score-num" style="color:var(--text-muted)">—</span>
-          </div>
-        </td>
-        <td>
-          <span class="risk-badge unanalyzed">
-            ○ Unanalyzed
-          </span>
-        </td>
-        <td>—</td>
-      </tr>
-    `;
-  }
+          <span class="score-num">${row.risk_score}</span>
+        </div>
+      </td>
+      <td>
+        <span class="risk-badge ${rc}">
+          ${getRiskDot(row.risk_level)} ${row.risk_level}
+        </span>
+      </td>
+      <td>${fmt.date(row.flagged_on)}</td>
+    </tr>
+  `;
 }
 
 // ── Fetch & Render Customers (server-side paginated) ─────────────────────────
@@ -303,7 +266,7 @@ async function fetchAndRenderCustomers() {
 
   // Build query string
   const riskVal = document.getElementById('risk-filter').value;
-  const qs = `customers?page=${currentPage}&limit=${PAGE_LIMIT}&search=${encodeURIComponent(searchVal)}&risk=${encodeURIComponent(riskVal)}`;
+  const qs = `customers?page=${currentPage}&limit=${PAGE_LIMIT}&search=${encodeURIComponent(searchVal)}&risk=${encodeURIComponent(riskVal)}&category=${encodeURIComponent(analysisState.category)}`;
   const response = await safeFetch(qs);
 
   if (!response || !response.data) {
@@ -475,11 +438,11 @@ document.getElementById('run-analysis-btn').addEventListener('click', () => {
   setTimeout(() => {
     overlay.style.display = 'none';
 
-    // Update analysis state so table rows reveal risk data
+    // Update analysis state with the selected category for backend filtering
     analysisState.analyzed = true;
     analysisState.category = selectedCategory;
 
-    // Re-render table with newly revealed risk data
+    // Re-fetch table with backend-filtered results
     currentPage = 1;
     fetchAndRenderCustomers();
 
