@@ -3,13 +3,14 @@
 reducer.py — Hadoop Streaming Reducer
 
 Reads sorted mapper output from stdin.
-Input format:   category \t orders,returns,refund_amount
-Output format:  category \t total_orders,total_returns,total_refund_loss
+Input format :  category \t orders,returns,refund_amount
+Output format:  category \t total_orders,total_returns,total_refund_loss,return_rate
 
-Aggregates per category:
-  - total_orders:  count of all transactions
-  - total_returns: count of returned transactions
-  - total_refunds: sum of refund amounts (revenue loss)
+Aggregates per product category:
+  - total_orders  : count of all transactions
+  - total_returns : count of returned transactions
+  - total_refunds : sum of refund amounts (revenue loss)
+  - return_rate   : percentage of orders that were returned
 """
 
 import sys

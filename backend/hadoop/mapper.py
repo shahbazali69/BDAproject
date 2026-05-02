@@ -2,13 +2,13 @@
 """
 mapper.py — Hadoop Streaming Mapper
 
-Reads the ecommerce_returns_dataset.csv from stdin.
+Reads the Ecommerce_Sales_Data.csv from stdin.
 Emits:  category \t 1,is_return,refund_amount
 
-Column indices (0-based):
-  5  → Category
-  9  → Return_Status
-  12 → Refund_Amount
+Column indices (0-based) for the 1M-row dataset:
+   3  → category
+  11  → returned
+  14  → total_amount
 """
 
 import sys
@@ -21,13 +21,15 @@ header = next(reader, None)
 
 for row in reader:
     try:
-        category = row[5].strip()
-        return_status = row[9].strip()
-        is_return = 1 if return_status == "Yes" else 0
+        category = row[3].strip()
+        returned = row[11].strip()
+        total_amount = row[14].strip()
 
-        # Safely convert Refund_Amount to float
+        is_return = 1 if returned == "Yes" else 0
+
+        # Safely convert total_amount to float
         try:
-            refund_amount = float(row[12])
+            refund_amount = float(total_amount) if is_return else 0.0
         except (ValueError, IndexError):
             refund_amount = 0.0
 

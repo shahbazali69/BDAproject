@@ -1,95 +1,107 @@
 """
-import_csv.py — Imports ecommerce_returns_dataset.csv into MongoDB.
-
-Usage:
-    cd backend
-    python import_csv.py
+import_csv.py
+Safely imports a 1,000,000-row Ecommerce CSV into local MongoDB
+using chunked reads and bulk inserts.
 """
+
+import os
+import random
+import time
 
 import pandas as pd
 from pymongo import MongoClient
-import random
-import os
 
-# ── Config ────────────────────────────────────────────────────────────────────
-CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "ecommerce_returns_dataset.csv")
+# ── Configuration ────────────────────────────────────────────────────
 MONGO_URI = "mongodb://localhost:27017"
 DB_NAME = "bda_project"
 COLLECTION_NAME = "ecommerce_returns"
+CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "Ecommerce_Sales_Data.csv")
+CHUNK_SIZE = 10_000
 
 
 def main():
-    # ── Connect to MongoDB ────────────────────────────────────────────────
-    print("⏳  Connecting to MongoDB...")
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    client.admin.command("ping")
+    # ── 1. Setup & Drop ──────────────────────────────────────────────
+    client = MongoClient(MONGO_URI)
     db = client[DB_NAME]
     collection = db[COLLECTION_NAME]
-    print("✅  Connected to MongoDB.")
 
-    # ── Read CSV ──────────────────────────────────────────────────────────
-    csv_abs = os.path.abspath(CSV_PATH)
-    print(f"📄  Reading CSV: {csv_abs}")
-    df = pd.read_csv(csv_abs)
-    print(f"    → {len(df)} rows, {len(df.columns)} columns")
-
-    # ── Drop existing collection to prevent duplicates ────────────────────
+    print(f"Connected to MongoDB at {MONGO_URI}")
+    print(f"Dropping existing collection '{COLLECTION_NAME}'...")
     collection.drop()
-    print("🗑️   Dropped existing collection.")
+    print("Collection dropped.\n")
 
-    # ── Build documents ───────────────────────────────────────────────────
-    documents = []
-    for _, row in df.iterrows():
-        is_return = str(row.get("Return_Status", "")).strip() == "Yes"
+    # ── 2. Chunked Reading ───────────────────────────────────────────
+    total_inserted = 0
+    chunk_number = 0
+    start_time = time.time()
 
-        # Risk score: returns get higher scores, non-returns get low scores
-        if is_return:
-            risk_score = round(random.uniform(40.0, 99.0), 1)
-        else:
-            risk_score = round(random.uniform(0.0, 30.0), 1)
+    print(f"Reading CSV: {os.path.abspath(CSV_PATH)}")
+    print(f"Chunk size : {CHUNK_SIZE:,}\n")
 
-        # Refund amount — handle NaN
-        refund = row.get("Refund_Amount", 0)
-        try:
-            refund = float(refund)
-        except (ValueError, TypeError):
-            refund = 0.0
-        if pd.isna(refund):
-            refund = 0.0
+    reader = pd.read_csv(CSV_PATH, chunksize=CHUNK_SIZE)
 
-        # Return date — handle NaT / NaN
-        return_date = row.get("Return_Date", "")
-        if pd.isna(return_date):
-            return_date = ""
-        else:
-            return_date = str(return_date).strip()
+    for chunk in reader:
+        chunk_number += 1
+        documents = []
 
-        # Customer email — generated from name
-        name = str(row.get("Customer_Name", "Unknown")).strip()
-        email = name.lower().replace(" ", ".") + "@example.com"
+        # ── 3. Processing each Chunk ─────────────────────────────────
+        for _, row in chunk.iterrows():
+            is_return = row.get("returned") == "Yes"
 
-        documents.append({
-            "customer_id":      str(row.get("Customer_ID", "")).strip(),
-            "customer_name":    name,
-            "customer_email":   email,
-            "product_category": str(row.get("Category", "")).strip(),
-            "return_status":    str(row.get("Return_Status", "")).strip(),
-            "refund_amount":    round(refund, 2),
-            "return_date":      return_date,
-            "risk_score":       risk_score,
-        })
+            risk_score = round(random.uniform(40, 99), 2) if is_return else round(random.uniform(0, 30), 2)
 
-    # ── Bulk insert ───────────────────────────────────────────────────────
-    print(f"📥  Inserting {len(documents)} documents...")
-    result = collection.insert_many(documents)
-    print(f"✅  Successfully inserted {len(result.inserted_ids)} documents into {DB_NAME}.{COLLECTION_NAME}")
+            customer_id = str(row.get("customer_id", ""))
 
-    # ── Quick stats ───────────────────────────────────────────────────────
-    total = collection.count_documents({})
-    returns = collection.count_documents({"return_status": "Yes"})
-    print(f"    → Total documents: {total}")
-    print(f"    → Returns (Return_Status=Yes): {returns}")
-    print(f"    → Non-returns: {total - returns}")
+            # Handle NaN for total_amount
+            try:
+                total_amount = float(row["total_amount"])
+            except (ValueError, TypeError):
+                total_amount = 0.0
+
+            refund_amount = total_amount if is_return else 0.0
+
+            # Handle NaN for request_date
+            return_date = row.get("request_date", "")
+            if pd.isna(return_date):
+                return_date = ""
+
+            doc = {
+                "customer_id": customer_id,
+                "customer_name": f"Customer {customer_id}",
+                "customer_email": f"{customer_id.lower()}@example.com",
+                "product_category": row.get("category", ""),
+                "return_status": row.get("returned", ""),
+                "refund_amount": refund_amount,
+                "return_date": str(return_date),
+                "risk_score": risk_score,
+                "is_return": is_return,
+            }
+
+            documents.append(doc)
+
+        # ── 4. Insert ────────────────────────────────────────────────
+        if documents:
+            collection.insert_many(documents)
+            total_inserted += len(documents)
+
+        # ── 5. Console Output (per chunk) ────────────────────────────
+        elapsed = time.time() - start_time
+        print(
+            f"  Chunk {chunk_number:>4}: Inserted {len(documents):>6,} rows  |  "
+            f"Total so far: {total_inserted:>10,}  |  Elapsed: {elapsed:.1f}s"
+        )
+
+    # ── Final Stats ──────────────────────────────────────────────────
+    total_time = time.time() - start_time
+    print("\n" + "=" * 60)
+    print(f"  Import complete!")
+    print(f"  Total rows inserted : {total_inserted:,}")
+    print(f"  Total chunks        : {chunk_number}")
+    print(f"  Total time          : {total_time:.2f}s")
+    print(f"  Avg speed           : {total_inserted / total_time:,.0f} rows/s")
+    print("=" * 60)
+
+    client.close()
 
 
 if __name__ == "__main__":
