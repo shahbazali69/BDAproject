@@ -1,31 +1,32 @@
 #!/usr/bin/env python3
-"""
-Customers Mapper — Emits per-row customer detail keyed by customer_id.
-
-Input:  Cleaned_Ecommerce_Data.csv via stdin
-Output: customer_id \t name|email|category|is_return|refund_amount|risk_score|return_date
-"""
-
 import sys
 import csv
+import random
 
 reader = csv.reader(sys.stdin)
-
-# Skip header
 header = next(reader, None)
 
 for row in reader:
     try:
-        customer_id = row[0].strip()
-        customer_name = row[1].strip()
-        customer_email = row[2].strip()
-        product_category = row[3].strip()
-        is_return = row[8].strip()
-        refund_amount = row[5].strip()
-        risk_score = row[7].strip()
-        return_date = row[6].strip()
-
-        value = f"{customer_name}|{customer_email}|{product_category}|{is_return}|{refund_amount}|{risk_score}|{return_date}"
-        print(f"{customer_id}\t{value}")
+        customer_id = row[1].strip()
+        category = row[3].strip()
+        returned = row[11].strip()
+        request_date = row[12].strip()
+        total_amount = row[14].strip()
+        
+        is_return = 1 if returned == "1" else 0
+        
+        try:
+            total_float = float(total_amount)
+        except ValueError:
+            total_float = 0.0
+            
+        refund_amount = total_float if is_return else 0.0
+        risk_score = round(random.uniform(40.0, 99.0), 2) if is_return else round(random.uniform(0.0, 30.0), 2)
+        
+        customer_name = f"Customer {customer_id}"
+        customer_email = f"{customer_id.lower()}@example.com"
+        
+        print(f"{customer_id}\t{customer_name}|{customer_email}|{category}|{is_return}|{refund_amount}|{risk_score}|{request_date}")
     except IndexError:
         continue
